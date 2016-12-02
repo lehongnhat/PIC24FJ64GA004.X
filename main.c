@@ -40,14 +40,24 @@
 #include <libpic30.h>
 
 unsigned int Fs = 50;
+unsigned int Ts;
+unsigned char e = 10;
+unsigned char Receiving_State = 0;
 
 
 int main(void) {
+    Ts = 1000 / Fs; 
     unsigned int i;
     UART1_mapping(10, 11);
     UART1_init();
     
-    Config_Timer1(1000);
+//    Config_Timer1(1000);
+    TRISBbits.TRISB7 = 1;
+    ODCBbits.ODB7 = 1;
+    IFS0bits.INT0IF = 0;    //Clear External Interrupt 1 Flag
+    IPC0bits.INT0IP = 4;    //set Priority level of External Interrupt 1
+    INTCON2bits.INT0EP = 1; //interrupt on negative edge
+    IEC0bits.INT0IE = 1;    //enable External Interrupt 1 
     
     Config_Light_Sensor();
     
@@ -70,7 +80,12 @@ int main(void) {
 
 void __attribute__((__interrupt__, __shadow__)) _T1Interrupt(void){
     if(U1MODEbits.UARTEN & IFS0bits.T1IF ){
-//    UART1_write_string(" da du 2s ");
+      switch(Receiving_State){
+          case 1:
+             Config_Timer1(Ts * e / 100);
+             Receiving_State = 11;  // Change to State 1.1
+      } 
+      
     IFS0bits.T1IF = 0; //clear Timer1 interrupt Flag
     }
     
@@ -82,17 +97,33 @@ void __attribute__((__interrupt__, __shadow__)) _T1Interrupt(void){
 //        IFS1bits.CNIF = 0;
 //    }
 //}
-//
-void __attribute__((__interrupt__,__shadow__)) _INT1Interrupt(void){
-    if(IFS1bits.INT1IF){
-        UART1_write_string(" Ok 1 \n");
-        IFS1bits.INT1IF = 0;    //Clear External Interrupt 1 Flag
-    }
-}
 
-//void __attribute__((__interrupt__)) _INT0Interrupt(void){
-//    if (IFS0bits.INT0IF){
-//        UART1_write_string(" Ok \n");
-//        IFS0bits.INT0IF = 0;
+//void __attribute__((__interrupt__)) _INT1Interrupt(void){
+//    if(IFS1bits.INT1IF){
+////        switch(Receiving_State){
+////            case 0:
+////                Config_Timer1(Ts);
+////                Receiving_State = 1; //change to State 1
+////                break;
+////            case 1:
+////                
+////                break;
+////                
+////        }
+//        IEC1bits.INT1IE = 0;    //disable External Interrupt 1  
+//        if(PORTCbits.RC4){
+//            UART1_write_string(" 0 -> 1 \n");
+//        }
+//        else UART1_write_string(" 1 -> 0 \n");
+//        __delay_ms(1);
+//        IFS1bits.INT1IF = 0;    //Clear External Interrupt 1 Flag
+////        IEC1bits.INT1IE = 1;    //enable External Interrupt 1  
 //    }
 //}
+
+void __attribute__((__interrupt__)) _INT0Interrupt(void){
+    if (IFS0bits.INT0IF){
+        UART1_write_string(" Ok \n");
+        IFS0bits.INT0IF = 0;
+    }
+}

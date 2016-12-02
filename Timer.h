@@ -12,7 +12,7 @@
 extern "C" {
 #endif
 
-    void Config_Timer1(unsigned int T);  //unit of T is mS
+    void Config_Timer1(unsigned int T);  //T is time cycle (ms)
 
 
 #ifdef	__cplusplus
