@@ -17,7 +17,7 @@
 // CONFIG2
 #pragma config POSCMOD = HS             // Primary Oscillator Select (HS Oscillator mode selected)
 #pragma config I2C1SEL = PRI            // I2C1 Pin Location Select (Use default SCL1/SDA1 pins)
-#pragma config IOL1WAY = OFF             // IOLOCK Protection (IOLOCK may be changed via unlocking seq)
+#pragma config IOL1WAY = OFF            // IOLOCK Protection (IOLOCK may be changed via unlocking seq)
 #pragma config OSCIOFNC = OFF           // Primary Oscillator Output Function (OSC2/CLKO/RC15 functions as CLKO (FOSC/2))
 #pragma config FCKSM = CSDCMD           // Clock Switching and Monitor (Clock switching and Fail-Safe Clock Monitor are disabled)
 #pragma config FNOSC = PRI              // Oscillator Select (Primary Oscillator (XT, HS, EC))
@@ -38,11 +38,14 @@
 
 
 #include <libpic30.h>
+#include <string.h>
 
-unsigned int Fs = 50;
+unsigned int Fs = 10;
 unsigned int Ts;
 unsigned char e = 10;
-unsigned char Receiving_State = 0;
+unsigned char Byte_Receiving_State = 0;
+
+
 
 
 int main(void) {
@@ -50,16 +53,6 @@ int main(void) {
     unsigned int i;
     UART1_mapping(10, 11);
     UART1_init();
-    
-//    Config_Timer1(1000);
-    TRISBbits.TRISB7 = 1;
-    ODCBbits.ODB7 = 1;
-    IFS0bits.INT0IF = 0;    //Clear External Interrupt 1 Flag
-    IPC0bits.INT0IP = 4;    //set Priority level of External Interrupt 1
-    INTCON2bits.INT0EP = 1; //interrupt on negative edge
-    IEC0bits.INT0IE = 1;    //enable External Interrupt 1 
-    
-    Config_Light_Sensor();
     
     TRISBbits.TRISB12 = 0;
     LATBbits.LATB12 = 1;
@@ -70,9 +63,11 @@ int main(void) {
     LATBbits.LATB15 = 1;
     
     while(1){
-        __delay_ms(2000);
+        __delay_ms(1500);
         LATBbits.LATB13 = !LATBbits.LATB13;
         LATBbits.LATB12 = !LATBbits.LATB12;
+        UART1_write_string(Light_Sensor_Data_Receiving(8));
+        UART1_write_string("\n");
 //        UART1_write_string("It's OK \n");
     }
     return 0;
@@ -80,10 +75,79 @@ int main(void) {
 
 void __attribute__((__interrupt__, __shadow__)) _T1Interrupt(void){
     if(U1MODEbits.UARTEN & IFS0bits.T1IF ){
-      switch(Receiving_State){
+      switch(Byte_Receiving_State){
+          case 0:
+              Start_bits_Error();
+              UART1_write_string(" T1-0 ");
+              break;
           case 1:
-             Config_Timer1(Ts * e / 100);
-             Receiving_State = 11;  // Change to State 1.1
+              if(Light_Sensor_Input){
+                  Byte_Receiving_State = 2;  // Change to State 2 if receive 2nd start bit
+                  Config_Timer1(Ts);
+//                   UART1_write_string(" T1-2 ");
+              } 
+              else {
+                  UART1_write_string(" er 1 ");
+                  Start_bits_Error();
+              }
+              break;
+          case 2:
+              if(!Light_Sensor_Input){
+                  Byte_Receiving_State = 3;  // Change to State 2 if receive 2nd start bit
+//                   UART1_write_string(" T1-3 ");
+              } 
+              else {
+                  Start_bits_Error();
+                  UART1_write_string(" er 2 ");
+              }
+              break;
+          case 3:
+              Byte_Receiving_State = 41;
+              if(!Light_Sensor_Input){
+                  Light_Sensor_Byte_Receiving(1,1);
+              }
+              break;
+          case 41:
+              Byte_Receiving_State = 42;
+              if(!Light_Sensor_Input) Light_Sensor_Byte_Receiving(2,1);
+              break;
+          case 42:
+              Byte_Receiving_State = 43;
+              if(!Light_Sensor_Input) Light_Sensor_Byte_Receiving(3,1);
+              break;
+          case 43:
+              Byte_Receiving_State = 44;
+              if(!Light_Sensor_Input) Light_Sensor_Byte_Receiving(4,1);
+              break;    
+          case 44:
+              Byte_Receiving_State = 45;
+              if(!Light_Sensor_Input) Light_Sensor_Byte_Receiving(5,1);
+              break;
+          case 45:
+              Byte_Receiving_State = 46;
+              if(!Light_Sensor_Input) Light_Sensor_Byte_Receiving(6,1);
+              break;  
+          case 46:
+              Byte_Receiving_State = 47;
+              if(!Light_Sensor_Input) Light_Sensor_Byte_Receiving(7,1);
+              break;
+          case 47:
+              Byte_Receiving_State = 48;
+              if(!Light_Sensor_Input) Light_Sensor_Byte_Receiving(8,1);
+              else Light_Sensor_Byte_Receiving(8,0);
+              break;
+          case 48:
+              Byte_Receiving_State = 49;
+              if(!Light_Sensor_Input) Light_Sensor_Byte_Receiving(9,1);
+              else Light_Sensor_Byte_Receiving(9,0);
+              break;
+          case 49:
+              Stop_Timer1();
+              Byte_Receiving_State = 0;
+              IEC1bits.INT1IE = 1; //    enable External Interrupt 1
+              break;
+          default:
+              Start_bits_Error();
       } 
       
     IFS0bits.T1IF = 0; //clear Timer1 interrupt Flag
@@ -98,32 +162,59 @@ void __attribute__((__interrupt__, __shadow__)) _T1Interrupt(void){
 //    }
 //}
 
-//void __attribute__((__interrupt__)) _INT1Interrupt(void){
-//    if(IFS1bits.INT1IF){
-////        switch(Receiving_State){
-////            case 0:
-////                Config_Timer1(Ts);
-////                Receiving_State = 1; //change to State 1
-////                break;
-////            case 1:
-////                
-////                break;
-////                
-////        }
-//        IEC1bits.INT1IE = 0;    //disable External Interrupt 1  
-//        if(PORTCbits.RC4){
-//            UART1_write_string(" 0 -> 1 \n");
+void __attribute__((__interrupt__,__auto_psv__)) _INT1Interrupt(void){
+    __delay_us(10);
+    if(!PORTCbits.RC4){
+        IEC1bits.INT1IE = 0;    //disable External Interrupt 1  
+//    __delay_us(10);
+//    if(!PORTCbits.RC4){
+//        switch(Byte_Receiving_State){
+//            case 0:
+//                Config_Timer1(Ts * (1 + e / 100.0));
+//                Byte_Receiving_State = 1; //change to State 1
+//                UART1_write_string(" E-0 ");
+//                break;
+//            case 1: 
+//                //not Data
+//                Stop_Receiving_Data();
+//                UART1_write_string(" E-1 ");
+//                UART1_write_number(PR1);
+//                break;
+//            case 2:
+//                Config_Timer1(Ts/2);
+//                Byte_Receiving_State = 3;
+//                UART1_write_string(" E-2 ");
+//                break;
+//            case 3:
+//                //not Data
+//                Stop_Receiving_Data();
+//                UART1_write_string(" E-3 ");
+//                break;
+//            default:
+//                //Error during transmission Light Data
+//                ;
 //        }
-//        else UART1_write_string(" 1 -> 0 \n");
-//        __delay_ms(1);
-//        IFS1bits.INT1IF = 0;    //Clear External Interrupt 1 Flag
-////        IEC1bits.INT1IE = 1;    //enable External Interrupt 1  
+//        UART1_write_string(" 0->1 ");
+//         
+//    }
+//    else UART1_write_string(" 1->0 ");
+        if(Byte_Receiving_State == 0){
+            Config_Timer1(Ts * 1.2);
+            Byte_Receiving_State = 1;
+        }
+        else {
+            Start_bits_Error();
+            UART1_write_string(" er EXT ");
+        }
+    }
+    IFS1bits.INT1IF = 0;    //Clear External Interrupt 1 Flag
+//    IEC1bits.INT1IE = 1;    //enable External Interrupt 1 
+}
+
+//void __attribute__((__interrupt__)) _INT0Interrupt(void){
+//    if (IFS0bits.INT0IF){
+//        UART1_write_string(" Ok \n");
+//        IFS0bits.INT0IF = 0;
 //    }
 //}
 
-void __attribute__((__interrupt__)) _INT0Interrupt(void){
-    if (IFS0bits.INT0IF){
-        UART1_write_string(" Ok \n");
-        IFS0bits.INT0IF = 0;
-    }
-}

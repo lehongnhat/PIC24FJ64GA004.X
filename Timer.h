@@ -13,7 +13,7 @@ extern "C" {
 #endif
 
     void Config_Timer1(unsigned int T);  //T is time cycle (ms)
-
+    void Stop_Timer1(); 
 
 #ifdef	__cplusplus
 }

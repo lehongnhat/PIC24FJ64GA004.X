@@ -12,9 +12,10 @@
 extern "C" {
 #endif
     void Config_Light_Sensor(void);
-    void Light_Sensor_Data_Receiving();
-    unsigned char Light_Sensor_Byte_Receiving();
-
+    char * Light_Sensor_Data_Receiving(unsigned char N);
+    void Light_Sensor_Byte_Receiving(unsigned char position, unsigned char bit_value);
+    void Start_bits_Error();
+    void Parity_bit_Error();
 #ifdef	__cplusplus
 }
 #endif
